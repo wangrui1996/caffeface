@@ -71,6 +71,10 @@ models/*
 *leveldb
 *lmdb
 
+# Jobs 
+#
+jobs/*
+
 # build, distribute, and bins (+ python proto bindings)
 build
 .build_debug/*
