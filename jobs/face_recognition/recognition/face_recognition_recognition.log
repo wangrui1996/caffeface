@@ -1,0 +1,1 @@
+jobs/face_recognition/recognition/face_recognition_recognition.sh: 2: jobs/face_recognition/recognition/face_recognition_recognition.sh: ./build/tools/caffe: not found

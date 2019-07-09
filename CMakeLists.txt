@@ -44,7 +44,8 @@ caffe_option(USE_OPENMP "Link with OpenMP (when your BLAS wants OpenMP and you g
 
 # This code is taken from https://github.com/sh1r0/caffe-android-lib
 caffe_option(USE_HDF5 "Build with hdf5" ON)
-
+set(OpenCV_DIR /home/rui/tools/opencv/build)
+include_directories(${PROJECT_SOURCE_DIR}/build/include/)
 # ---[ Dependencies
 include(cmake/Dependencies.cmake)
 
