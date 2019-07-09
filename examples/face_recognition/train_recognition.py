@@ -181,7 +181,6 @@ net = caffe.NetSpec()
 params_str['train'] = False
 net.data, net.label = L.Data(ntop=2)
 FmobileFaceNetBody(net, net.data, config)
-# Remove the first and last layer from test net.
 deploy_net = net
 with open(deploy_net_file, 'w') as f:
     net_param = deploy_net.to_proto()
@@ -209,8 +208,6 @@ with open(train_net_file, 'w') as f:
   print(net.to_proto(), file=f)
 shutil.copy(train_net_file, job_dir)
 
-
-
 # Create test net
 net = caffe.NetSpec()
 
@@ -218,14 +215,9 @@ params_str['train'] = False
 
 #net.data. net.label = L.Data(name="lmdbdata", source="/home/rui/lmdb", batch_size=1000, backend="LMDB")
 net.data, net.label = L.Data(name = "input_data", batch_size=128, backend=P.Data.LMDB, source="/home/rui/lmdb",
-                         include=dict(phase=caffe.TEST), transform_param=dict(scale=1./255, crop_size=48), ntop=2)
-#net.data, net.label = L.Python(name="data", ntop=2, python_param={
-#  'module': "pythonLayer",
-#  'layer':  "DataLayer",
-#  'param_str': str(params_str)
-#})
+                         include=dict(phase=caffe.TEST), transform_param=dict(), ntop=2)
 
-body_layer = BoyNetBody(net, from_layer=net.data, num_classes=1000)
+body_layer = FmobileFaceNetBody(net, net.data, config)
 net.softmax_layer = L.Softmax(body_layer)
 
 net.acc = L.Accuracy(net.softmax_layer, net.label)
@@ -234,8 +226,6 @@ with open(test_net_file, 'w') as f:
     print('name: "{}_test"'.format(model_name), file=f)
     print(net.to_proto(), file=f)
 shutil.copy(test_net_file, job_dir)
-
-
 
 # Create solver.
 solver = caffe_pb2.SolverParameter(
