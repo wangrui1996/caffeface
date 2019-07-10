@@ -88,6 +88,8 @@ void func_thread(Parameter parameter) {
         status = ReadImageToDatum(parameter.root_folder_ + parameter.lines_[line_id].first,
                 parameter.lines_[line_id].second, parameter.resize_height_, parameter.resize_width_, parameter.is_color_,
                 enc, &datum);
+
+
         if (!status) continue;
         if (parameter.check_size_) {
             int data_size=0;
