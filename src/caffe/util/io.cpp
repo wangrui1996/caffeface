@@ -111,7 +111,7 @@ cv::Mat ReadImageToCVMat(const string& filename) {
 static bool matchExt(const std::string & fn,
                      std::string en) {
   size_t p = fn.rfind('.');
-  std::string ext
+  std::string ext;
         try {
         ext = p != fn.npos ? fn.substr(p+1) : fn;
         } catch (int x) {
