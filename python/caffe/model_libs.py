@@ -100,14 +100,14 @@ def BoyNetBody(net, from_layer, num_classes):
 
 def Conv(net, from_layer, num_output=1, kernel_size=1, stride=1, pad=0, num_group=1, name=None, suffix=""):
     name = "%s%s_conv2d" % (name, suffix)
-    net[name] = L.Convolution(from_layer, num_output=num_output, kernel_size=kernel_size, group=num_group, stride=stride, pad=pad, bias_term=False)
+    net[name] = L.Convolution(from_layer, num_output=num_output, kernel_size=kernel_size, group=num_group, stride=stride, pad=pad, bias_term=False, engine=P.Convolution.Engine.CAFFE)
     net.batch = L.BatchNorm(net[name])
     net.act = L.ReLU(net.batch)
     return net.act
 
 def Linear(net, from_layer, num_output=1, kernel_size=1, stride=1, pad=0, num_group=1, name=None, suffix=""):
     name = "{}{}_conv2d".format(name,suffix)
-    net[name] = L.Convolution(from_layer, num_output=num_output, kernel_size=kernel_size, group=num_group, stride=stride, pad=pad, bias_term=False)
+    net[name] = L.Convolution(from_layer, num_output=num_output, kernel_size=kernel_size, group=num_group, stride=stride, pad=pad, bias_term=False, engine=P.Convolution.Engine.CAFFE)
     net.batchnorm = L.BatchNorm(net[name])
     return net.batchnorm
 
@@ -130,12 +130,16 @@ def FmobileFaceNetBody(net, from_layer, config):
     num_classes = config.emb_size
     fc_type = config.net_output
     blocks = config.net_blocks
+    # 112 x 112
     output_layer = Conv(net, from_layer, num_output=64, kernel_size=3, pad=1, stride=2, name="conv_1")
+    # 56 x 56
     if blocks[0]==1:
         output_layer = Conv(net, num_group=64, num_output=64, kernel_size=3, pad=1, stride=1, name="conv_2_dw")
     else:
         output_layer = Residual(net, output_layer, num_block=blocks[0], num_output=64, kernel_size=3, stride=1, pad=1, num_group=64, name="res_2")
     output_layer = DResidual(net, output_layer, num_output=64, kernel_size=3, stride=2, pad=1, num_group=128, name="dconv_23")
+
+    # 28 x 28
     output_layer = Residual(net, output_layer, num_block=blocks[1], num_output=64, kernel_size=3, stride=1,pad=1, num_group=128, name="res_3")
     output_layer = DResidual(net, output_layer, num_output=128, kernel_size=3, stride=2, pad=1, num_group=256, name="dconv_34")
     output_layer = Residual(net, output_layer, num_block=blocks[2], num_output=128, kernel_size=3, stride=1, pad=1, num_group=256, name="res_4")

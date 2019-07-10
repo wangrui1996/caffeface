@@ -4,7 +4,7 @@
 
 #include <string>
 #include <vector>
-
+#include "opencv2/highgui.hpp"
 #include "caffe/data_transformer.hpp"
 #include "caffe/util/io.hpp"
 #include "caffe/util/math_functions.hpp"
@@ -201,6 +201,73 @@ void DataTransformer<Dtype>::Transform(const vector<Datum> & datum_vector,
   }
 }
 
+template<typename Dtype>
+void DataTransformer<Dtype>::Transform(const DatumPair& datumpair,
+                                           Blob<Dtype>* transformed_blob) {
+        // If datum is encoded, decode and transform the cv::image.
+        if (datumpair.encoded()) {
+#ifdef USE_OPENCV
+            CHECK(!(param_.force_color() && param_.force_gray()))
+            << "cannot set both force_color and force_gray";
+            std::pair<cv::Mat, cv::Mat> cv_img;
+            if (param_.force_color() || param_.force_gray()) {
+                // If force_color then decode in color otherwise decode in gray.
+                cv_img = DecodeDatumPairToCVMat(datumpair, param_.force_color());
+            } else {
+
+                cv_img = DecodeDatumPairToCVMatNative(datumpair);
+                std::cout << "ffffvv" << std::endl;
+                cv::imwrite("/home/rui/demo1.jpg", cv_img.first);
+                cv::imwrite("/home/rui/demo2.jpg", cv_img.second);
+                std::cout << "ffffvv5" << std::endl;
+                cv::imshow("demo1", cv_img.first);
+                cv::imshow("demo2", cv_img.second);
+                std::cout << "ffffvv3" << std::endl;
+                std::cout << "Label_image:" << datumpair.label() << std::endl;
+                cv::waitKey(0);
+            }
+            Transform(cv_img, transformed_blob);
+            // Transform the cv::image into blob.
+            return;
+#else
+            LOG(FATAL) << "Encoded datum requires OpenCV; compile with USE_OPENCV.";
+#endif  // USE_OPENCV
+        } else {
+            if (param_.force_color() || param_.force_gray()) {
+                LOG(ERROR) << "force_color and force_gray only for encoded datum";
+            }
+        }
+
+        std::cout << datumpair.data_first() << std::endl;
+        exit(0);
+        const int crop_size = param_.crop_size();
+        const int datum_channels = datumpair.channels();
+        const int datum_height = datumpair.height();
+        const int datum_width = datumpair.width();
+
+        // Check dimensions.
+        const int channels = transformed_blob->channels();
+        const int height = transformed_blob->height();
+        const int width = transformed_blob->width();
+        const int num = transformed_blob->num();
+
+        CHECK_EQ(channels, datum_channels);
+        CHECK_LE(height, datum_height);
+        CHECK_LE(width, datum_width);
+        CHECK_GE(num, 2);
+
+        if (crop_size) {
+            CHECK_EQ(crop_size, height);
+            CHECK_EQ(crop_size, width);
+        } else {
+            CHECK_EQ(datum_height, height);
+            CHECK_EQ(datum_width, width);
+        }
+
+        Dtype* transformed_data = transformed_blob->mutable_cpu_data();
+//        Transform(datum, transformed_data);
+    }
+
 #ifdef USE_OPENCV
 template<typename Dtype>
 void DataTransformer<Dtype>::Transform(const vector<cv::Mat> & mat_vector,
@@ -323,6 +390,124 @@ void DataTransformer<Dtype>::Transform(const cv::Mat& cv_img,
     }
   }
 }
+
+template<typename Dtype>
+void DataTransformer<Dtype>::Transform(const std::pair<cv::Mat, cv::Mat> & cv_img,
+                                           Blob<Dtype>* transformed_blob) {
+        const int crop_size = param_.crop_size();
+        const int img_channels = cv_img.first.channels();
+        const int img_height = cv_img.first.rows;
+        const int img_width = cv_img.first.cols;
+
+        // Check dimensions.
+        const int channels = transformed_blob->channels();
+        const int height = transformed_blob->height();
+        const int width = transformed_blob->width();
+        const int num = transformed_blob->num();
+
+        CHECK_EQ(channels, img_channels);
+        CHECK_LE(height, img_height);
+        CHECK_LE(width, img_width);
+        CHECK_GE(num, 2);
+
+        CHECK(cv_img.first.depth() == CV_8U) << "Image data type must be unsigned byte";
+
+        const Dtype scale = param_.scale();
+        const bool do_mirror = param_.mirror() && Rand(2);
+        const bool has_mean_file = param_.has_mean_file();
+        const bool has_mean_values = mean_values_.size() > 0;
+
+        CHECK_GT(img_channels, 0);
+        CHECK_GE(img_height, crop_size);
+        CHECK_GE(img_width, crop_size);
+
+        Dtype* mean = NULL;
+        if (has_mean_file) {
+            CHECK_EQ(img_channels, data_mean_.channels());
+            CHECK_EQ(img_height, data_mean_.height());
+            CHECK_EQ(img_width, data_mean_.width());
+            mean = data_mean_.mutable_cpu_data();
+        }
+        if (has_mean_values) {
+            CHECK(mean_values_.size() == 1 || mean_values_.size() == img_channels) <<
+                                                                                   "Specify either 1 mean_value or as many as channels: " << img_channels;
+            if (img_channels > 1 && mean_values_.size() == 1) {
+                // Replicate the mean_value for simplicity
+                for (int c = 1; c < img_channels; ++c) {
+                    mean_values_.push_back(mean_values_[0]);
+                }
+            }
+        }
+
+
+
+        int h_off = 0;
+        int w_off = 0;
+        cv::Mat cv_cropped_img_first = cv_img.first;
+        cv::Mat cv_cropped_img_second = cv_img.second;
+        if (crop_size) {
+            CHECK_EQ(crop_size, height);
+            CHECK_EQ(crop_size, width);
+            // We only do random crop when we do training.
+            if (phase_ == TRAIN) {
+                h_off = Rand(img_height - crop_size + 1);
+                w_off = Rand(img_width - crop_size + 1);
+            } else {
+                h_off = (img_height - crop_size) / 2;
+                w_off = (img_width - crop_size) / 2;
+            }
+            cv::Rect roi(w_off, h_off, crop_size, crop_size);
+            cv_cropped_img_first = cv_img.first(roi);
+            cv_cropped_img_second = cv_img.second(roi);
+            //cv_cropped_img = cv_img(roi);
+        } else {
+            CHECK_EQ(img_height, height);
+            CHECK_EQ(img_width, width);
+        }
+
+        CHECK(cv_cropped_img_first.data);
+        CHECK(cv_cropped_img_second.data);
+
+        Dtype* transformed_data_first = transformed_blob->mutable_cpu_data();
+        Dtype* transformed_data_second = transformed_blob->mutable_cpu_data() + transformed_blob->offset(1);
+        int top_index;
+        for (int h = 0; h < height; ++h) {
+            const uchar* ptr_first = cv_cropped_img_first.ptr<uchar>(h);
+            const uchar* ptr_second = cv_cropped_img_second.ptr<uchar>(h);
+            int img_index = 0;
+            for (int w = 0; w < width; ++w) {
+                for (int c = 0; c < img_channels; ++c) {
+                    if (do_mirror) {
+                        top_index = (c * height + h) * width + (width - 1 - w);
+                    } else {
+                        top_index = (c * height + h) * width + w;
+                    }
+                    // int top_index = (c * height + h) * width + w;
+                    Dtype pixel_first = static_cast<Dtype>(ptr_first[img_index++]);
+                    Dtype pixel_second = static_cast<Dtype>(ptr_second[img_index++]);
+                    if (has_mean_file) {
+                        int mean_index = (c * img_height + h_off + h) * img_width + w_off + w;
+                        transformed_data_first[top_index] =
+                                (pixel_first - mean[mean_index]) * scale;
+                        transformed_data_second[top_index] =
+                                (pixel_second - mean[mean_index]) * scale;
+                    } else {
+                        if (has_mean_values) {
+                            transformed_data_first[top_index] =
+                                    (pixel_first - mean_values_[c]) * scale;
+                            transformed_data_second[top_index] =
+                                    (pixel_second - mean_values_[c]) * scale;
+                        } else {
+                            transformed_data_first[top_index] = pixel_first * scale;
+                            transformed_data_second[top_index] = pixel_second * scale;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
 #endif  // USE_OPENCV
 
 template<typename Dtype>

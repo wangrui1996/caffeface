@@ -42,7 +42,7 @@ DEFINE_bool(check_size, false,
     "When this option is on, check that all the datum have the same size");
 DEFINE_bool(encoded, false,
     "When this option is on, the encoded image will be save in datum");
-DEFINE_string(encode_type, "jpg",
+DEFINE_string(encode_type, "",
     "Optional: What type should we encode the image as ('png','jpg',...).");
 
 shared_ptr<db::Transaction> txn;
@@ -53,7 +53,7 @@ boost::mutex mu_count;
 boost::mutex mu_txn;
 
 struct Parameter {
-    std::vector<std::pair<std::string, int> > lines_;
+    std::vector<std::pair<std::pair<std::string, std::string>, int> > lines_;
     string encode_type_;
     bool encoded_;
     string root_folder_;
@@ -65,7 +65,7 @@ struct Parameter {
 };
 
 void func_thread(Parameter parameter) {
-    Datum datum;
+    DatumPair datumpair;
     int lines_size = parameter.lines_.size();
     while (true) {
         mu_count.lock();
@@ -75,36 +75,47 @@ void func_thread(Parameter parameter) {
         if (line_id >= lines_size)
             return;
         bool status;
-        std::string enc = parameter.encode_type_;
-        if (parameter.encoded_ && !enc.size()) {
+        std::string enc_first = parameter.encode_type_;
+        std::string enc_last = parameter.encode_type_;
+        if (parameter.encoded_ && !enc_first.size()) {
             // Guess the encoding type from the file name
-            string fn = parameter.lines_[line_id].first;
-            size_t p = fn.rfind('.');
-            if ( p == fn.npos )
-                LOG(WARNING) << "Failed to guess the encoding of '" << fn << "'";
-            enc = fn.substr(p+1);
-            std::transform(enc.begin(), enc.end(), enc.begin(), ::tolower);
+            string fn_first = parameter.lines_[line_id].first.first;
+            size_t p = fn_first.rfind('.');
+            if ( p == fn_first.npos )
+                LOG(WARNING) << "Failed to guess the encoding of '" << fn_first << "'";
+            enc_first = fn_first.substr(p+1);
+            std::transform(enc_first.begin(), enc_first.end(), enc_first.begin(), ::tolower);
         }
-        status = ReadImageToDatum(parameter.root_folder_ + parameter.lines_[line_id].first,
+        if (parameter.encoded_ && !enc_last.size()) {
+            // Guess the encoding type from the file name
+            string fn_last = parameter.lines_[line_id].first.second;
+            size_t p = fn_last.rfind('.');
+            if ( p == fn_last.npos )
+                LOG(WARNING) << "Failed to guess the encoding of '" << fn_last << "'";
+            enc_last = fn_last.substr(p+1);
+            std::transform(enc_last.begin(), enc_last.end(), enc_last.begin(), ::tolower);
+        }
+        status = ReadImageToDatumPair(parameter.root_folder_ + parameter.lines_[line_id].first.first,
+                parameter.root_folder_ + parameter.lines_[line_id].first.second,
                 parameter.lines_[line_id].second, parameter.resize_height_, parameter.resize_width_, parameter.is_color_,
-                enc, &datum);
+                enc_first, &datumpair);
         if (!status) continue;
         if (parameter.check_size_) {
             int data_size=0;
             if (!parameter.data_size_initialized_) {
-                data_size = datum.channels() * datum.height() * datum.width();
+                data_size = datumpair.channels() * datumpair.height() * datumpair.width();
                 parameter.data_size_initialized_ = true;
             } else {
-                const std::string& data = datum.data();
+                const std::string& data = datumpair.data_first();
                 CHECK_EQ(data.size(), data_size) << "Incorrect data field size "
                 << data.size();
             }
         }
         // sequential
-        string key_str = caffe::format_int(line_id, 8) + "_" + parameter.lines_[line_id].first;
+        string key_str = caffe::format_int(line_id, 8) + "_" + parameter.lines_[line_id].first.first;
         // Put in db
         string out;
-        CHECK(datum.SerializeToString(&out));
+        CHECK(datumpair.SerializeToString(&out));
         mu_txn.lock();
         txn->Put(key_str, out);
         mu_txn.unlock();
@@ -149,14 +160,23 @@ int main(int argc, char** argv) {
   const string encode_type = FLAGS_encode_type;
 
   std::ifstream infile(argv[2]);
-  std::vector<std::pair<std::string, int> > lines;
+  std::vector<std::pair<std::pair<std::string, std::string>, int> > lines;
   std::string line;
+  std::string first_image;
+  std::string last_image;
   size_t pos;
   int label;
   while (std::getline(infile, line)) {
-    pos = line.find_last_of(' ');
+    pos = line.find_first_of(' ');
+    first_image = line.substr(0, pos);
+    line = line.substr(pos+1);
+    pos = line.find_first_of(' ');
+
     label = atoi(line.substr(pos + 1).c_str());
-    lines.push_back(std::make_pair(line.substr(0, pos), label));
+    if (line.substr(pos+1).compare("True") == 0 || line.substr(pos+1).compare("true") == 0)
+        label = 1;
+    std::cout << "label: " << label << std::endl;
+    lines.push_back(std::make_pair(std::make_pair(first_image, line.substr(0, pos)), label));
   }
   if (FLAGS_shuffle) {
     // randomly shuffle data
@@ -177,7 +197,7 @@ int main(int argc, char** argv) {
 
   // Storing to db
   std::string root_folder(argv[1]);
-  Datum datum;
+  DatumPair datumpair;
   int data_size = 0;
   bool data_size_initialized = false;
 

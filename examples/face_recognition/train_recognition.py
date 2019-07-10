@@ -56,7 +56,7 @@ resize_height = 112
 expand_ratio = 1.1
 cutting_ratio = 0.3
 prob = 0.7
-batch_size = 256
+batch_size = 1
 resize = "{}x{}".format(resize_width, resize_height)
 params_str = {
   'label_txt': train_txt,
@@ -137,7 +137,7 @@ if num_gpus > 0:
 
 # Evaluate on whole test set.
 num_test_image = 1024
-test_batch_size = 64
+test_batch_size = 1
 # Ideally test_batch_size should be divisible by num_test_image,
 # otherwise mAP will be slightly off the true value.
 test_iter = int(math.ceil(float(num_test_image) / test_batch_size))
@@ -196,7 +196,7 @@ shutil.copy(deploy_net_file, job_dir)
 # Create train net.
 net = caffe.NetSpec()
 params_str['train'] = True
-net.data, net.label = L.Data(name="input_data",batch_size=128, backend=P.Data.LMDB, source="/home/rui/lmdb",
+net.data, net.label = L.Data(name="input_data",batch_size=default.per_batch_size, backend=P.Data.LMDB, source="/home/rui/lmdb",
                          include=dict(phase=caffe.TRAIN), transform_param=dict(), ntop=2)
 
 body_layer = FmobileFaceNetBody(net, net.data, config)
@@ -214,7 +214,7 @@ net = caffe.NetSpec()
 params_str['train'] = False
 
 #net.data. net.label = L.Data(name="lmdbdata", source="/home/rui/lmdb", batch_size=1000, backend="LMDB")
-net.data, net.label = L.Data(name = "input_data", batch_size=128, backend=P.Data.LMDB, source="/home/rui/lmdb",
+net.data, net.label = L.DataPair(name = "input_data", batch_size=2, backend=P.Data.LMDB, source="/home/rui/data/tmplmdb",
                          include=dict(phase=caffe.TEST), transform_param=dict(), ntop=2)
 
 body_layer = FmobileFaceNetBody(net, net.data, config)
@@ -247,14 +247,13 @@ for file in os.listdir(snapshot_dir):
     iter = int(basename.split("{}_iter_".format(model_name))[1])
     if iter > max_iter:
       max_iter = iter
-
 #train_src_param = '--weights="{}" \\\n'.format(pretrain_model)
 train_src_param = ""
 if resume_training:
   if max_iter > 0:
     train_src_param = '--snapshot="{}_iter_{}.solverstate" \\\n'.format(snapshot_prefix, max_iter)
 
-max_iter = 31511
+
 if copy_model:
   if max_iter > 0:
     train_src_param = '--weights="{}_iter_{}.caffemodel" \\\n'.format(snapshot_prefix, max_iter)
@@ -277,7 +276,7 @@ if remove_old_models:
 # Create job file.
 with open(job_file, 'w') as f:
   f.write('cd {}\n'.format(caffe_root))
-  f.write('./build/tools/caffe train \\\n')
+  f.write('./build/tools/caffe-d train \\\n')
   f.write('--solver="{}" \\\n'.format(solver_file))
   f.write(train_src_param)
   if solver_param['solver_mode'] == P.Solver.GPU:

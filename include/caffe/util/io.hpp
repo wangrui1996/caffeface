@@ -105,7 +105,15 @@ inline bool ReadImageToDatum(const string& filename, const int label,
   return ReadImageToDatum(filename, label, height, width, is_color,
                           "", datum);
 }
+bool ReadFileToDatumPair(const string& filename_first, const string& filename_last,
+                             const int label, DatumPair* datumPair) ;
+bool ReadImageToDatumPair(const string& filename_first, const string& filename_last,
+                              const int label, const int height, const int width, const bool is_color,
+                              const std::string & encoding, DatumPair* datumpair);
 
+std::pair<cv::Mat, cv::Mat> DecodeDatumPairToCVMat(const DatumPair& datumpair, bool is_color) ;
+std::pair<cv::Mat,cv::Mat> DecodeDatumPairToCVMatNative(const DatumPair& datumpair);
+void CVMatToDatumPair(const cv::Mat& cv_img_first, const cv::Mat& cv_img_last, DatumPair* datumpair);
 inline bool ReadImageToDatum(const string& filename, const int label,
     const int height, const int width, Datum* datum) {
   return ReadImageToDatum(filename, label, height, width, true, datum);

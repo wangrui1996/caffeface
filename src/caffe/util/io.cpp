@@ -140,6 +140,36 @@ bool ReadImageToDatum(const string& filename, const int label,
     return false;
   }
 }
+
+bool ReadImageToDatumPair(const string& filename_first, const string& filename_last,
+        const int label, const int height, const int width, const bool is_color,
+        const std::string & encoding, DatumPair* datumpair) {
+  cv::Mat cv_img_first = ReadImageToCVMat(filename_first, height, width, is_color);
+  cv::Mat cv_img_last = ReadImageToCVMat(filename_last, height, width, is_color);
+  if (cv_img_first.data) {
+    if (encoding.size()) {
+      if ( (cv_img_first.channels() == 3) == is_color && !height && !width &&
+          matchExt(filename_first, encoding) )
+        return ReadFileToDatumPair(filename_first, filename_last, label, datumpair);
+      std::vector<uchar> buf;
+      cv::imencode("."+encoding, cv_img_first, buf);
+      datumpair->set_data_first(std::string(reinterpret_cast<char*>(&buf[0]),
+                      buf.size()));
+      std::vector<uchar> buf1;
+      cv::imencode("."+encoding, cv_img_last, buf1);
+      datumpair->set_data_last(std::string(reinterpret_cast<char*>(&buf1[0]),
+                      buf1.size()));
+      datumpair->set_label(label);
+      datumpair->set_encoded(true);
+      return true;
+    }
+    CVMatToDatumPair(cv_img_first, cv_img_last, datumpair);
+    datumpair->set_label(label);
+    return true;
+  } else {
+    return false;
+  }
+}
 #endif  // USE_OPENCV
 
 bool ReadFileToDatum(const string& filename, const int label,
@@ -162,6 +192,33 @@ bool ReadFileToDatum(const string& filename, const int label,
   }
 }
 
+bool ReadFileToDatumPair(const string& filename_first, const string& filename_last,
+        const int label, DatumPair* datumPair) {
+  std::streampos size;
+
+  fstream file_first(filename_first.c_str(), ios::in|ios::binary|ios::ate);
+  fstream file_last(filename_last.c_str(), ios::in|ios::binary|ios::ate);
+  if (file_first.is_open() && file_last.is_open()) {
+    size = file_first.tellg();
+    std::string buffer(size, ' ');
+    file_first.seekg(0, ios::beg);
+    file_first.read(&buffer[0], size);
+    file_first.close();
+    datumPair->set_data_first(buffer);
+    size = file_last.tellg();
+    std::string buffer1(size, ' ');
+    file_last.seekg(0, ios::beg);
+    file_last.read(&buffer1[0], size);
+    file_last.close();
+    datumPair->set_data_last(buffer1);
+    datumPair->set_label(label);
+    datumPair->set_encoded(true);
+    return true;
+  } else {
+    return false;
+  }
+}
+
 #ifdef USE_OPENCV
 cv::Mat DecodeDatumToCVMatNative(const Datum& datum) {
   cv::Mat cv_img;
@@ -174,6 +231,28 @@ cv::Mat DecodeDatumToCVMatNative(const Datum& datum) {
   }
   return cv_img;
 }
+std::pair<cv::Mat,cv::Mat> DecodeDatumPairToCVMatNative(const DatumPair& datumpair) {
+        cv::Mat cv_img_first;
+        CHECK(datumpair.encoded()) << "Datum not encoded";
+        const string& data_first = datumpair.data_first();
+        std::vector<char> vec_data_first(data_first.c_str(), data_first.c_str() + data_first.size());
+        cv_img_first = cv::imdecode(vec_data_first, -1);
+        if (!cv_img_first.data) {
+            LOG(ERROR) << "Could not decode datum ";
+        }
+
+        cv::Mat cv_img_last;
+        CHECK(datumpair.encoded()) << "Datum not encoded";
+        const string& data_last = datumpair.data_last();
+        std::vector<char> vec_data_last(data_last.c_str(), data_last.c_str() + data_last.size());
+        cv_img_last = cv::imdecode(vec_data_last, -1);
+        if (!cv_img_last.data) {
+            LOG(ERROR) << "Could not decode datum ";
+        }
+
+        return std::make_pair(cv_img_first, cv_img_last);
+    }
+
 cv::Mat DecodeDatumToCVMat(const Datum& datum, bool is_color) {
   cv::Mat cv_img;
   CHECK(datum.encoded()) << "Datum not encoded";
@@ -186,6 +265,31 @@ cv::Mat DecodeDatumToCVMat(const Datum& datum, bool is_color) {
     LOG(ERROR) << "Could not decode datum ";
   }
   return cv_img;
+}
+
+std::pair<cv::Mat, cv::Mat> DecodeDatumPairToCVMat(const DatumPair& datumpair, bool is_color) {
+    cv::Mat cv_img_first;
+    CHECK(datumpair.encoded()) << "Datum not encoded";
+    const string& data = datumpair.data_first();
+    std::vector<char> vec_data(data.c_str(), data.c_str() + data.size());
+    int cv_read_flag = (is_color ? CV_LOAD_IMAGE_COLOR :
+                            CV_LOAD_IMAGE_GRAYSCALE);
+    cv_img_first = cv::imdecode(vec_data, cv_read_flag);
+    if (!cv_img_first.data) {
+            LOG(ERROR) << "Could not decode datum ";
+    }
+    cv::Mat cv_img_last;
+    CHECK(datumpair.encoded()) << "Datum not encoded";
+    const string& data_last = datumpair.data_last();
+    std::vector<char> vec_data_last(data_last.c_str(), data_last.c_str() + data_last.size());
+    cv_read_flag = (is_color ? CV_LOAD_IMAGE_COLOR :
+                        CV_LOAD_IMAGE_GRAYSCALE);
+    cv_img_last = cv::imdecode(vec_data_last, cv_read_flag);
+    if (!cv_img_last.data) {
+        LOG(ERROR) << "Could not decode datum ";
+    }
+
+    return std::make_pair(cv_img_first, cv_img_last);
 }
 
 // If Datum is encoded will decoded using DecodeDatumToCVMat and CVMatToDatum
@@ -234,5 +338,46 @@ void CVMatToDatum(const cv::Mat& cv_img, Datum* datum) {
   }
   datum->set_data(buffer);
 }
+
+void CVMatToDatumPair(const cv::Mat& cv_img_first, const cv::Mat& cv_img_last, DatumPair* datumpair) {
+  CHECK(cv_img_first.depth() == CV_8U) << "Image data type must be unsigned byte";
+  CHECK(cv_img_last.depth() == CV_8U) << "Image data type must be unsigned byte";
+  datumpair->set_channels(cv_img_first.channels());
+  datumpair->set_height(cv_img_first.rows);
+  datumpair->set_width(cv_img_first.cols);
+  datumpair->clear_data_first();
+  datumpair->clear_data_last();
+  datumpair->clear_float_data_first();
+  datumpair->clear_float_data_last();
+  datumpair->set_encoded(false);
+  int datum_channels = datumpair->channels();
+  int datum_height = datumpair->height();
+  int datum_width = datumpair->width();
+  int datum_size = datum_channels * datum_height * datum_width;
+  std::string buffer(datum_size, ' ');
+  for (int h = 0; h < datum_height; ++h) {
+    const uchar* ptr = cv_img_first.ptr<uchar>(h);
+    int img_index = 0;
+    for (int w = 0; w < datum_width; ++w) {
+      for (int c = 0; c < datum_channels; ++c) {
+        int datum_index = (c * datum_height + h) * datum_width + w;
+        buffer[datum_index] = static_cast<char>(ptr[img_index++]);
+      }
+    }
+  }
+  datumpair->set_data_first(buffer);
+  for (int h = 0; h < datum_height; ++h) {
+    const uchar* ptr = cv_img_last.ptr<uchar>(h);
+    int img_index = 0;
+    for (int w = 0; w < datum_width; ++w) {
+      for (int c = 0; c < datum_channels; ++c) {
+        int datum_index = (c * datum_height + h) * datum_width + w;
+        buffer[datum_index] = static_cast<char>(ptr[img_index++]);
+      }
+    }
+  }
+  datumpair->set_data_last(buffer);
+}
+
 #endif  // USE_OPENCV
 }  // namespace caffe
