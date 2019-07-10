@@ -140,7 +140,7 @@ num_test_image = 1024
 test_batch_size = 1
 # Ideally test_batch_size should be divisible by num_test_image,
 # otherwise mAP will be slightly off the true value.
-test_iter = int(math.ceil(float(num_test_image) / test_batch_size))
+test_iter = 1
 
 solver_param = {
     # Train parameters
@@ -196,12 +196,14 @@ shutil.copy(deploy_net_file, job_dir)
 # Create train net.
 net = caffe.NetSpec()
 params_str['train'] = True
-net.data, net.label = L.Data(name="input_data",batch_size=default.per_batch_size, backend=P.Data.LMDB, source="/home/rui/lmdb",
+net.data, net.label = L.Data(name="input_data",batch_size=default.per_batch_size, backend=P.Data.LMDB, source="data/face_recognition/lmdb",
                          include=dict(phase=caffe.TRAIN), transform_param=dict(), ntop=2)
 
 body_layer = FmobileFaceNetBody(net, net.data, config)
 
 net.loss = L.SoftmaxWithLoss(body_layer, net.label)
+net.softmax_layer = L.Softmax(body_layer)
+net.acc = L.Accuracy(net.softmax_layer, net.label)
 
 with open(train_net_file, 'w') as f:
   print('name: "{}_train"'.format(model_name), file=f)
@@ -220,7 +222,6 @@ net.data, net.label = L.DataPair(name = "input_data", batch_size=2, backend=P.Da
 body_layer = FmobileFaceNetBody(net, net.data, config)
 net.softmax_layer = L.Softmax(body_layer)
 
-net.acc = L.Accuracy(net.softmax_layer, net.label)
 
 with open(test_net_file, 'w') as f:
     print('name: "{}_test"'.format(model_name), file=f)

@@ -216,15 +216,11 @@ void DataTransformer<Dtype>::Transform(const DatumPair& datumpair,
             } else {
 
                 cv_img = DecodeDatumPairToCVMatNative(datumpair);
-                std::cout << "ffffvv" << std::endl;
-                cv::imwrite("/home/rui/demo1.jpg", cv_img.first);
-                cv::imwrite("/home/rui/demo2.jpg", cv_img.second);
-                std::cout << "ffffvv5" << std::endl;
-                cv::imshow("demo1", cv_img.first);
-                cv::imshow("demo2", cv_img.second);
-                std::cout << "ffffvv3" << std::endl;
-                std::cout << "Label_image:" << datumpair.label() << std::endl;
-                cv::waitKey(0);
+//                cv::imshow("demo1", cv_img.first);
+//                cv::imshow("demo2", cv_img.second);
+//                std::cout << "ffffvv3" << std::endl;
+//                std::cout << "Label_image:" << datumpair.label() << std::endl;
+//                cv::waitKey(0);
             }
             Transform(cv_img, transformed_blob);
             // Transform the cv::image into blob.
@@ -465,6 +461,10 @@ void DataTransformer<Dtype>::Transform(const std::pair<cv::Mat, cv::Mat> & cv_im
             CHECK_EQ(img_width, width);
         }
 
+    //    cv::imshow("demo1", cv_cropped_img_first);
+    //    cv::imshow("demo2", cv_cropped_img_second);
+    //    cv::waitKey(1);
+
         CHECK(cv_cropped_img_first.data);
         CHECK(cv_cropped_img_second.data);
 
@@ -483,7 +483,7 @@ void DataTransformer<Dtype>::Transform(const std::pair<cv::Mat, cv::Mat> & cv_im
                         top_index = (c * height + h) * width + w;
                     }
                     // int top_index = (c * height + h) * width + w;
-                    Dtype pixel_first = static_cast<Dtype>(ptr_first[img_index++]);
+                    Dtype pixel_first = static_cast<Dtype>(ptr_first[img_index]);
                     Dtype pixel_second = static_cast<Dtype>(ptr_second[img_index++]);
                     if (has_mean_file) {
                         int mean_index = (c * img_height + h_off + h) * img_width + w_off + w;

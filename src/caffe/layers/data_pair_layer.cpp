@@ -41,12 +41,12 @@ void DataPairLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
   top_shape[2] = 112;
   top_shape[3] = 112;
   this->transformed_data_.Reshape(top_shape);
-  std::cout << this->transformed_data_.shape(1);
-  std::cout << top_shape[2] << std::endl;
+  //std::cout << this->transformed_data_.shape(1);
+  //std::cout << top_shape[2] << std::endl;
   // Reshape top[0] and prefetch_data according to the batch_size.
   top_shape[0] = batch_size*2;
   top[0]->Reshape(top_shape);
-  std::cout << top_shape.data() << std::endl;
+  //std::cout << top_shape.data() << std::endl;
   for (int i = 0; i < this->prefetch_.size(); ++i) {
     this->prefetch_[i]->data_.Reshape(top_shape);
   }
@@ -88,7 +88,7 @@ void DataPairLayer<Dtype>::Next() {
 // This function is called on prefetch thread
 template<typename Dtype>
 void DataPairLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
-    std::cout << "Yes" << std::endl;
+    //std::cout << "Yes" << std::endl;
   CPUTimer batch_timer;
   batch_timer.Start();
   double read_time = 0;
@@ -97,11 +97,11 @@ void DataPairLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
   CHECK(batch->data_.count());
   CHECK(this->transformed_data_.count());
   const int batch_size = this->layer_param_.data_pair_param().batch_size();
-  std::cout << "ff" << std::endl;
+  //std::cout << "ff" << std::endl;
   DatumPair datumpair;
-  std::cout << batch_size << std::endl;
+  //std::cout << batch_size << std::endl;
   for (int item_id = 0; item_id < batch_size; ++item_id) {
-      std::cout << "fff1" << std::endl;
+      //std::cout << "fff1" << std::endl;
     timer.Start();
     while (Skip()) {
       Next();
@@ -135,11 +135,11 @@ void DataPairLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
     if (this->output_labels_) {
       Dtype* top_label = batch->label_.mutable_cpu_data();
       top_label[item_id] = datumpair.label();
-      std::cout << "label: " << datumpair.label() << std::endl;
+      //std::cout << "label: " << datumpair.label() << std::endl;
     }
     trans_time += timer.MicroSeconds();
     Next();
-    std::cout << "fff" << std::endl;
+    //std::cout << "fff" << std::endl;
   }
 //exit(0);
   timer.Stop();

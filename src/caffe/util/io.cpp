@@ -75,12 +75,7 @@ cv::Mat ReadImageToCVMat(const string& filename,
   cv::Mat cv_img;
   int cv_read_flag = (is_color ? CV_LOAD_IMAGE_COLOR :
     CV_LOAD_IMAGE_GRAYSCALE);
-  cv::Mat cv_img_origin;
-  try {
-       cv_img_origin = cv::imread(filename, cv_read_flag);
-  } catch (int x) {
-     LOG(INFO) << "read image from '" << filename << "' failed"  << std::endl;
-  }
+  cv::Mat cv_img_origin = cv::imread(filename, cv_read_flag);
   if (!cv_img_origin.data) {
     LOG(ERROR) << "Could not open or find file " << filename;
     return cv_img_origin;
@@ -111,15 +106,7 @@ cv::Mat ReadImageToCVMat(const string& filename) {
 static bool matchExt(const std::string & fn,
                      std::string en) {
   size_t p = fn.rfind('.');
-  std::string ext;
-        try {
-        ext = p != fn.npos ? fn.substr(p+1) : fn;
-        } catch (int x) {
-            std::cout << "image read fialed: " << fn << std::endl;
-            exit(0);
-        }
-
-
+  std::string ext = p != fn.npos ? fn.substr(p+1) : fn;
   std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
   std::transform(en.begin(), en.end(), en.begin(), ::tolower);
   if ( ext == en )

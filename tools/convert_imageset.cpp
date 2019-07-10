@@ -82,14 +82,7 @@ void func_thread(Parameter parameter) {
             size_t p = fn.rfind('.');
             if ( p == fn.npos )
                 LOG(WARNING) << "Failed to guess the encoding of '" << fn << "'";
-            try {
-                enc = fn.substr(p+1);
-            } catch (int x) {
-                std::cout << "handle substr: flad while: " << fn << std::endl;
-                exit(0);
-            }
-
-
+            enc = fn.substr(p+1);
             std::transform(enc.begin(), enc.end(), enc.begin(), ::tolower);
         }
         status = ReadImageToDatum(parameter.root_folder_ + parameter.lines_[line_id].first,
