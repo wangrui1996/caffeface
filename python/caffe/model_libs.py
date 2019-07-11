@@ -13,13 +13,14 @@ kwargs = {
 def get_fc1(net, last_layer, num_classes, fc_type, input_channel=512):
     body = last_layer
     if fc_type== "E":
-    #    net.bn1 = L.BatchNorm(last_layer)
-        net.drop_ouput = L.Dropout(body, dropout_ratio=0.4)
-  #      net.drop_ouput = net.bn1
-        net.pre_fc1 = L.InnerProduct(net.drop_ouput, num_output=num_classes, **kwargs)
-        net.fc1 = L.BatchNorm(net.pre_fc1)
+        body = L.BatchNorm(body, name="bn1")
 
-    return net.fc1
+        body = L.Dropout(body, dropout_ratio=0.4)
+  #      net.drop_ouput = net.bn1
+        fc1 = L.InnerProduct(body, num_output=num_classes, name="pre_fc1",**kwargs)
+        fc1 = net.fc1 = L.BatchNorm(fc1, name="fc1")
+
+    return fc1
 
 
 
@@ -104,31 +105,34 @@ def BoyNetBody(net, from_layer, num_classes):
     return net[name]
 
 def Conv(net, from_layer, num_output=1, kernel_size=1, stride=1, pad=0, num_group=1, name=None, suffix=""):
-    name = "%s%s_conv2d" % (name, suffix)
-    net[name] = L.Convolution(from_layer, num_output=num_output, kernel_size=kernel_size, group=num_group, stride=stride, pad=pad, bias_term=False, engine=P.Convolution.Engine.CAFFE, **kwargs)
-    net.batch = L.BatchNorm(net[name])
-    net.act = L.ReLU(net.batch)
-    return net.act
+    type= "Convolution"
+    if num_group != 1:
+        type = "DepthwiseConvolution"
+    conv = L.Convolution(from_layer, type= type, num_output=num_output, kernel_size=kernel_size, group=num_group, stride=stride, pad=pad, bias_term=False, name="%s%s_conv2d"%(name, suffix) , engine=P.Convolution.Engine.CAFFE, **kwargs)
+    bn = L.BatchNorm(conv, name="%s%s_batchnorm"%(name, suffix))
+    act = L.ReLU(bn, name="%s%s_relu"%(name, suffix))
+    return act
 
 def Linear(net, from_layer, num_output=1, kernel_size=1, stride=1, pad=0, num_group=1, name=None, suffix=""):
-    name = "{}{}_conv2d".format(name,suffix)
-    net[name] = L.Convolution(from_layer, num_output=num_output, kernel_size=kernel_size, group=num_group, stride=stride, pad=pad, bias_term=False, engine=P.Convolution.Engine.CAFFE, **kwargs)
-    net.batchnorm = L.BatchNorm(net[name])
-    return net.batchnorm
+    type= "Convolution"
+    if num_group != 1:
+        type = "DepthwiseConvolution"
+    conv = L.Convolution(from_layer, num_output=num_output, kernel_size=kernel_size, group=num_group, stride=stride, pad=pad, bias_term=False, name="%s%s_conv2d"%(name,suffix), type=type,engine=P.Convolution.Engine.CAFFE, **kwargs)
+    bn = L.BatchNorm(conv, name="%s%s_batchnormal"%(name,suffix))
+    return bn
 
 def DResidual(net, from_layer, num_output=1, kernel_size=3, stride=2, pad=1, num_group=1, name=None, suffix=""):
-    name = "{}{}_conv_sep".format(name, suffix)
-    net[name] = Conv(net, from_layer, num_output=num_group, kernel_size=1, pad=0, stride=1)
-    net.conv_dw = Conv(net, net[name], num_output=num_group, num_group=num_group, kernel_size=kernel_size, pad=pad, stride=stride)
-    net.conv_proj = Linear(net, net.conv_dw, num_output=num_output, kernel_size=1, pad=0, stride=1)
-    return net.conv_proj
+    conv = Conv(net, from_layer, num_output=num_group, kernel_size=1, pad=0, stride=1, name="%s%s_conv_sep"%(name, suffix))
+    conv_dw = Conv(net, conv, num_output=num_group, num_group=num_group, kernel_size=kernel_size, pad=pad, stride=stride, name="%s%s_dw"%(name,suffix))
+    proj = Linear(net, conv_dw, num_output=num_output, kernel_size=1, pad=0, stride=1, name="%s%s_conv_proj"%(name,suffix))
+    return proj
 
 def Residual(net, from_layer, num_block=1, num_output=1, kernel_size=3, stride=1, pad=1, num_group=1, name=None, suffix=""):
     identity = from_layer
     for i in range(num_block):
         shortcut = identity
-        net.block = DResidual(net, identity, num_output=num_output, kernel_size=kernel_size, stride=stride, pad=pad, num_group=num_group)
-        identity = L.Eltwise(net.block, shortcut)
+        conv = DResidual(net, identity, num_output=num_output, kernel_size=kernel_size, stride=stride, pad=pad, num_group=num_group, name="%s%s_block"%(name,suffix), suffix="%d"%i)
+        identity = L.Eltwise(conv, shortcut)
     return identity
 
 def FmobileFaceNetBody(net, from_layer, config):
@@ -154,26 +158,3 @@ def FmobileFaceNetBody(net, from_layer, config):
     fc1 = get_fc1(net, output_layer, num_classes, fc_type)
     return fc1
 
-
-def TFmobileFaceNetBody(net, from_layer, config):
-    num_classes = config.emb_size
-    fc_type = config.net_output
-    blocks = config.net_blocks
-    # 112 x 112
-    output_layer = Conv(net, from_layer, num_output=64, kernel_size=3, pad=1, stride=2, name="conv_1")
-    # 56 x 56
-    if blocks[0]==1:
-        output_layer = Conv(net, num_group=64, num_output=64, kernel_size=3, pad=1, stride=1, name="conv_2_dw")
-    else:
-        output_layer = Residual(net, output_layer, num_block=blocks[0], num_output=64, kernel_size=3, stride=1, pad=1, num_group=64, name="res_2")
-    output_layer = DResidual(net, output_layer, num_output=64, kernel_size=3, stride=2, pad=1, num_group=128, name="dconv_23")
-
-    # 28 x 28
-    output_layer = Residual(net, output_layer, num_block=blocks[1], num_output=64, kernel_size=3, stride=1,pad=1, num_group=128, name="res_3")
-    output_layer = DResidual(net, output_layer, num_output=128, kernel_size=3, stride=2, pad=1, num_group=256, name="dconv_34")
-    output_layer = Residual(net, output_layer, num_block=blocks[2], num_output=128, kernel_size=3, stride=1, pad=1, num_group=256, name="res_4")
-    output_layer = DResidual(net, output_layer, num_output=128, kernel_size=3, stride=2, pad=1, num_group=512, name="dconv_45")
-    output_layer = Residual(net, output_layer, num_block=blocks[3], num_output=128, kernel_size=3, stride=1, pad=1, num_group=256, name="res_5")
-    output_layer = Conv(net, output_layer, num_output=512, kernel_size=1, pad=0, stride=1, name="conv_6sep")
-    fc1 = get_fc1(net, output_layer, num_classes, fc_type)
-    return fc1

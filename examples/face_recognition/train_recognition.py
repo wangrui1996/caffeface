@@ -144,7 +144,7 @@ test_iter = 1
 
 solver_param = {
     # Train parameters
-    'base_lr': base_lr,
+    'base_lr': 0.00001,
     'weight_decay': 0.0005,
     'lr_policy': "multistep",
     'stepvalue': [80000, 100000, 120000],
@@ -202,7 +202,7 @@ net.data, net.label = L.Data(name="input_data",batch_size=default.per_batch_size
 body_layer = FmobileFaceNetBody(net, net.data, config)
 fc_pre_class = L.InnerProduct(body_layer, num_output=config.num_classes)
 net.loss = L.SoftmaxWithLoss(fc_pre_class, net.label)
-net.softmax_layer = L.Softmax(body_layer)
+net.softmax_layer = L.Softmax(fc_pre_class)
 net.acc = L.Accuracy(net.softmax_layer, net.label)
 
 with open(train_net_file, 'w') as f:
@@ -279,7 +279,7 @@ if remove_old_models:
 # Create job file.
 with open(job_file, 'w') as f:
   f.write('cd {}\n'.format(caffe_root))
-  f.write('./build/tools/caffe-d train \\\n')
+  f.write('./build/tools/caffe train \\\n')
   f.write('--solver="{}" \\\n'.format(solver_file))
   f.write(train_src_param)
   if solver_param['solver_mode'] == P.Solver.GPU:
