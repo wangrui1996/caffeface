@@ -38,7 +38,7 @@ dataset_name = "recognition"
 run_soon = True
 # Set true if you want to load from most recently saved snapshot.
 # Otherwise, we will load from the pretrain_model defined below.
-resume_training = True
+resume_training = False
 
 #
 copy_model = True
@@ -150,10 +150,10 @@ solver_param = {
     'stepvalue': [80000, 100000, 120000],
     'gamma': 0.1,
     'momentum': 0.9,
-    'iter_size': iter_size,
+    'iter_size': 4,
     'max_iter': 1200000,
     'snapshot': 10000,
-    'display': 50,
+    'display': 2,
     'average_loss': 50,
     'type': "SGD",
     'solver_mode': solver_mode,
@@ -162,7 +162,7 @@ solver_param = {
     'snapshot_after_train': True,
     # Test parameters
     'test_iter': [test_iter],
-    'test_interval': 500,
+    'test_interval': 50,
     'test_initialization': True,
     }
 
@@ -200,8 +200,8 @@ net.data, net.label = L.Data(name="input_data",batch_size=default.per_batch_size
                          include=dict(phase=caffe.TRAIN), transform_param=dict(), ntop=2)
 
 body_layer = FmobileFaceNetBody(net, net.data, config)
-
-net.loss = L.SoftmaxWithLoss(body_layer, net.label)
+fc_pre_class = L.InnerProduct(body_layer, num_output=config.num_classes)
+net.loss = L.SoftmaxWithLoss(fc_pre_class, net.label)
 net.softmax_layer = L.Softmax(body_layer)
 net.acc = L.Accuracy(net.softmax_layer, net.label)
 
@@ -218,14 +218,16 @@ params_str['train'] = False
 #net.data. net.label = L.Data(name="lmdbdata", source="/home/rui/lmdb", batch_size=1000, backend="LMDB")
 net.data, net.label = L.DataPair(name = "input_data", batch_size=2, backend=P.Data.LMDB, source="/home/rui/data/tmplmdb",
                          include=dict(phase=caffe.TEST), transform_param=dict(), ntop=2)
-
 body_layer = FmobileFaceNetBody(net, net.data, config)
-net.softmax_layer = L.Softmax(body_layer)
+#fc_pre = L.InnerProduct(body_layer, num_output=config.num_classes)
+#net.softmax_layer = L.Softmax(fc_pre)
 
 
 with open(test_net_file, 'w') as f:
+    net_param = net.to_proto()
+    del net_param.layer[-1]
     print('name: "{}_test"'.format(model_name), file=f)
-    print(net.to_proto(), file=f)
+    print(net_param, file=f)
 shutil.copy(test_net_file, job_dir)
 
 # Create solver.

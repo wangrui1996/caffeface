@@ -37,7 +37,7 @@ network.y2.net_name = 'fmobilefacenet'
 network.y2.emb_size = 256
 network.y2.net_output = 'GDC'
 network.y2.net_output = 'E'
-network.y2.net_blocks = [2,8,16,4]
+network.y2.net_blocks = [2,4,8,4]
 #network.y2.net_blocks = [2,2,2,2]
 
 # dataset settings

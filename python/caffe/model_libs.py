@@ -5,17 +5,20 @@ from caffe import layers as L
 from caffe import params as P
 from caffe.proto import caffe_pb2
 
-
+kwargs = {
+    'param': [dict(lr_mult=1, decay_mult=1), dict(lr_mult=2, decay_mult=0)],
+    'weight_filler': dict(type='xavier'),
+    'bias_filler': dict(type='constant', value=0)
+}
 def get_fc1(net, last_layer, num_classes, fc_type, input_channel=512):
     body = last_layer
     if fc_type== "E":
-        net.bn1 = L.BatchNorm(last_layer)
-        net.drop_ouput = L.Dropout(net.bn1, dropout_ratio=0.4)
-
-        net.pre_fc1 = L.InnerProduct(net.drop_ouput, num_output=num_classes)
+    #    net.bn1 = L.BatchNorm(last_layer)
+        net.drop_ouput = L.Dropout(body, dropout_ratio=0.4)
+  #      net.drop_ouput = net.bn1
+        net.pre_fc1 = L.InnerProduct(net.drop_ouput, num_output=num_classes, **kwargs)
         net.fc1 = L.BatchNorm(net.pre_fc1)
 
-    print fc_type
     return net.fc1
 
 
@@ -29,7 +32,9 @@ def make_if_not_exist(path):
     if not os.path.exists(path):
         os.makedirs(path)
 
-
+kwargs = {
+    'param': [dict(lr_mult=1, decay_mult=1)],
+    'weight_filler': dict(type='xavier')}
 
 def BoyNetBody(net, from_layer, num_classes):
     kwargs = {
@@ -100,14 +105,14 @@ def BoyNetBody(net, from_layer, num_classes):
 
 def Conv(net, from_layer, num_output=1, kernel_size=1, stride=1, pad=0, num_group=1, name=None, suffix=""):
     name = "%s%s_conv2d" % (name, suffix)
-    net[name] = L.Convolution(from_layer, num_output=num_output, kernel_size=kernel_size, group=num_group, stride=stride, pad=pad, bias_term=False, engine=P.Convolution.Engine.CAFFE)
+    net[name] = L.Convolution(from_layer, num_output=num_output, kernel_size=kernel_size, group=num_group, stride=stride, pad=pad, bias_term=False, engine=P.Convolution.Engine.CAFFE, **kwargs)
     net.batch = L.BatchNorm(net[name])
     net.act = L.ReLU(net.batch)
     return net.act
 
 def Linear(net, from_layer, num_output=1, kernel_size=1, stride=1, pad=0, num_group=1, name=None, suffix=""):
     name = "{}{}_conv2d".format(name,suffix)
-    net[name] = L.Convolution(from_layer, num_output=num_output, kernel_size=kernel_size, group=num_group, stride=stride, pad=pad, bias_term=False, engine=P.Convolution.Engine.CAFFE)
+    net[name] = L.Convolution(from_layer, num_output=num_output, kernel_size=kernel_size, group=num_group, stride=stride, pad=pad, bias_term=False, engine=P.Convolution.Engine.CAFFE, **kwargs)
     net.batchnorm = L.BatchNorm(net[name])
     return net.batchnorm
 
@@ -150,3 +155,25 @@ def FmobileFaceNetBody(net, from_layer, config):
     return fc1
 
 
+def TFmobileFaceNetBody(net, from_layer, config):
+    num_classes = config.emb_size
+    fc_type = config.net_output
+    blocks = config.net_blocks
+    # 112 x 112
+    output_layer = Conv(net, from_layer, num_output=64, kernel_size=3, pad=1, stride=2, name="conv_1")
+    # 56 x 56
+    if blocks[0]==1:
+        output_layer = Conv(net, num_group=64, num_output=64, kernel_size=3, pad=1, stride=1, name="conv_2_dw")
+    else:
+        output_layer = Residual(net, output_layer, num_block=blocks[0], num_output=64, kernel_size=3, stride=1, pad=1, num_group=64, name="res_2")
+    output_layer = DResidual(net, output_layer, num_output=64, kernel_size=3, stride=2, pad=1, num_group=128, name="dconv_23")
+
+    # 28 x 28
+    output_layer = Residual(net, output_layer, num_block=blocks[1], num_output=64, kernel_size=3, stride=1,pad=1, num_group=128, name="res_3")
+    output_layer = DResidual(net, output_layer, num_output=128, kernel_size=3, stride=2, pad=1, num_group=256, name="dconv_34")
+    output_layer = Residual(net, output_layer, num_block=blocks[2], num_output=128, kernel_size=3, stride=1, pad=1, num_group=256, name="res_4")
+    output_layer = DResidual(net, output_layer, num_output=128, kernel_size=3, stride=2, pad=1, num_group=512, name="dconv_45")
+    output_layer = Residual(net, output_layer, num_block=blocks[3], num_output=128, kernel_size=3, stride=1, pad=1, num_group=256, name="res_5")
+    output_layer = Conv(net, output_layer, num_output=512, kernel_size=1, pad=0, stride=1, name="conv_6sep")
+    fc1 = get_fc1(net, output_layer, num_classes, fc_type)
+    return fc1
