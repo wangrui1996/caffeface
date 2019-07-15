@@ -144,7 +144,7 @@ test_iter = 1
 
 solver_param = {
     # Train parameters
-    'base_lr': 0.00001,
+    'base_lr': 0.1,
     'weight_decay': 0.0005,
     'lr_policy': "multistep",
     'stepvalue': [80000, 100000, 120000],
